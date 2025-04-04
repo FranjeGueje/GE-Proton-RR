@@ -1,2 +1,2 @@
-# ge-proton-rr
+# GE-Proton Rolling Release
 GE-Proton Rolling Release
