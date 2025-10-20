@@ -1,30 +1,31 @@
 #!/bin/bash
 
 ##############################################################################################################################################################
-# AUTOR: Paco Guerrero <fjgj1@hotmail.com>
-# PROJECT: GE-Proton Rolling Releale installer
-# ABOUT: Download and add the latest version of GE-Proton as a Steam compatibility tool by always using the same one
+# AUTHOR: Paco Guerrero <fjgj1@hotmail.com>
+# PROJECT: GE-Proton Rolling Release Installer
+# ABOUT: Downloads and installs the latest version of GE-Proton as a Steam compatibility tool, ensuring the same version is always used.
 #
-# PARAMS:
-# --help --> help about this tool
-# --no-gui --> unattended, without gui
-# --debug --> create debug.log file with all operations
-# --force --> the latest GE-Proton will be downloaded and installed forcibly
-# --no-backup --> No backup the actual GE-Proton of compatibility folder
+# PARAMETERS:
+# --help --> Show help about this tool
+# --no-gui --> Run unattended (without GUI)
+# --debug --> Create a log file with all operations
+# --force --> Force download and installation of the latest GE-Proton version
+# --no-update-app --> Do not update this tool from the internet
+# --install --> Add to KDE autostart
+# --uninstall --> Remove from KDE autostart
 #
-# DEBUG MODE: run 'DEBUG=Y path-to-this-script/thi-script.sh'
+# REQUIREMENTS: which, curl, wget
 #
-# REQUERIMENTS: which, curl, wget
-#
-# EXITs:
-# 0 --> OK!!!
-# 1 --> Missing required component
-# 2 --> Cannot download the lastest file
-# 3 --> Before the extracting: the file is not downloaded
-# 4 --> Error extracting the tar.gz file
-# 8 --> App upgraded
-# 88 --> It seems that there is no need to install a new version of GE-Proton
-# 253-> Invalid parameter
+# EXIT CODES:
+# 0   --> OK
+# 1   --> Missing required component
+# 2   --> Failed to download the latest file
+# 3   --> File not downloaded before extraction
+# 4   --> Error extracting the tar.gz file
+# 8   --> Application upgraded
+# 88  --> No new version of GE-Proton needs to be installed
+# 253 --> Invalid parameter
+
 ##############################################################################################################################################################
 
 #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -34,18 +35,18 @@
 # Show the help
 #
 function show_help() {
-    echo -e "[Usages]\n$0 -h|--help\
-    \n$0 [-v] [-f] [--no-gui] [--no-backup]\
+    echo -e "[Usage]\n$0 -h|--help\
+    \n$0 [-v] [-f] [--no-gui] [--no-update-app]\
     \n$0 [-v] [--install]\
     \n$0 [-v] [--uninstall]\n\
     \n[Parameters]\n\
-    \t-h|--help\t\tThis help.\n\
-    \t-v|--debug|--verbose\tThis parameter will creating a file $DEBUGFILE with verbose info.\n\
-    \t-f|--force\t\tThe latest GE-Proton will be downloaded and installed forcibly.\n\
-    \t--no-gui\t\tRun $NOMBRE automatically.\n\
-    \t--no-backup\t\tNo backup the actual GE-Proton of compatibility folder.\n\
-    \t-i|--install\t\tInstall this app in silent mode on desktop's autostart.\n\
-    \t-u|--uninstall\t\tUninstall this app from desktop's autostart."
+    \t-h|--help\t\tShow this help message.\n\
+    \t-v|--debug|--verbose\tCreate a file '$DEBUGFILE' with verbose output.\n\
+    \t-f|--force\t\tForce download and installation of the latest GE-Proton version.\n\
+    \t--no-gui\t\tRun '$NOMBRE' automatically without GUI.\n\
+    \t-N|--no-update-app\tDo not update this app from the internet.\n\
+    \t-i|--install\t\tInstall this app silently in the desktop autostart.\n\
+    \t-u|--uninstall\t\tRemove this app from the desktop autostart."
 }
 
 ##
@@ -53,23 +54,24 @@ function show_help() {
 #
 pre_launch(){
     NOMBRE="GE-Proton Rolling Release"
-    VERSION=5
+    VERSION=6
 
     TOOLPATH=$(readlink -f "$(dirname "$0")")
-    DEBUGFILE="$TOOLPATH/debug.log"
     OLDVERSION="$TOOLPATH/$(basename "$0").old"
+    TMPFOLDER=$(mktemp -d -q)
     MYAPP_FILE_FROM_INTERNET="https://api.github.com/repos/FranjeGueje/GE-Proton-RR/releases/latest"
-    DOWNLOADEDFILE="$TOOLPATH/GE-Proton.tar.gz"
-    EXTRACTFOLDER="$TOOLPATH/.extract/"
+    EXTRACTFOLDER="$TMPFOLDER/.extract/"
 
     COMPATFOLDER="$HOME/.local/share/Steam/compatibilitytools.d/"
     INSTALLFOLDER="$COMPATFOLDER"GE-Proton/
-    BACKUPFOLDER="$TOOLPATH"/GE-Proton_backup/
+    INSTALLAPP="$HOME/.local/bin/ge-proton-rr.sh"
+    DOWNLOADEDFILE="$TMPFOLDER/GE-Proton.tar.gz"
+    DEBUGFILE="$COMPATFOLDER""$NOMBRE.log"
     CHECKURL="$INSTALLFOLDER""url_downloaded"
 
     # If DEBUGFILE has more of a size then we delete the file
     if [ -f "$DEBUGFILE" ];then
-        local __tamano=__limite= 
+        local __tamano=__limite=
         __tamano=$(stat -c%s "$DEBUGFILE")
         # 5 MB en bytes
         __limite=$((5 * 1024 * 1024))
@@ -81,7 +83,7 @@ pre_launch(){
 ##
 # Finish the script
 #
-post_launch(){    
+post_launch(){
     [ -f "$DOWNLOADEDFILE" ] && rm -f "$DOWNLOADEDFILE"
     [ -d "$EXTRACTFOLDER" ] && rm -Rf "$EXTRACTFOLDER"
     [ -n "$DEBUG" ] && to_debug_file "Exiting..."
@@ -102,6 +104,8 @@ function to_debug_file() {
 # Install or Uninstall the software on autostart
 #
 function inst_unins_autostart() {
+    [ -z "${GEP_AUTOSTART:-}" ] && return 0
+
     if [ "$GEP_AUTOSTART" == "Y" ];then
         do_install
         post_launch
@@ -117,12 +121,12 @@ function inst_unins_autostart() {
 # Install the software on autostart
 #
 function do_install() {
-    local __fichero=
-    __fichero=$(readlink -f "$0")
+    mkdir -p "$(dirname "$INSTALLAPP")"
+    cp -f "$(readlink -f "$0")" "$INSTALLAPP"
     echo -e "[Desktop Entry]
 Name=GE-Proton-RR
 Comment=Create a compatibility tool in Rolling Release format from the official GE-Proton
-Exec=$__fichero --no-gui -v
+Exec=\"$INSTALLAPP\" --no-gui -v
 Terminal=false
 Type=Application" > "$HOME/.config/autostart/ge-proton-rr.desktop"
 }
@@ -137,6 +141,12 @@ function do_uninstall() {
     else
         [ -n "$DEBUG" ] && to_debug_file "[WARNING] : The file $HOME/.config/autostart/ge-proton-rr.desktop not found."
     fi
+    if [ "$(readlink -f "$0")" == "$INSTALLAPP" ];then
+        [ -n "$DEBUG" ] && to_debug_file "[WARNING] : The file running is $INSTALLAPP. Dont delete the file."
+    else
+        rm -f "$INSTALLAPP"
+        [ -n "$DEBUG" ] && to_debug_file "[INFO] : The file running is different to $INSTALLAPP. It has been deleted."
+    fi
 }
 
 ##
@@ -150,8 +160,12 @@ show_title(){
 # Should be updated? - check the last stable version on The Internet
 #
 should_be_updated(){
-    local __file=
+    # Check if has been defined GEP_NOUPGRADE for not upgrading this tool
+    [ -n "${GEP_NOUPGRADE:-}" ] && return 0
+
+    local __file __bakfile
     __file=$(basename "$0").lastversion && [ -f "$__file" ] && rm "$__file"
+    __bakfile="$(mktemp -q)"
 
     if curl -s --head --request GET https://api.github.com --max-time 3 | grep "HTTP/" 2>/dev/null >/dev/null; then
         local sha_web
@@ -161,13 +175,13 @@ should_be_updated(){
         else
             to_debug_file "[WARING] Updating $NOMBRE"
             local URL
-            URL=$(curl -s "$MYAPP_FILE_FROM_INTERNET" | grep browser_download_url | cut -d '"' -f 4 | grep x86_64| grep -w ge-proton-rr.sh)
-            wget -O "$0".bak -q --show-progress "$URL" >/dev/null 2>&1
+            URL=$(curl -s "$MYAPP_FILE_FROM_INTERNET" | grep browser_download_url | cut -d '"' -f 4 | grep -w ge-proton-rr.sh 2>/dev/null)
+            wget -O "$__bakfile" -q --show-progress "$URL" >/dev/null 2>&1
             # shellcheck disable=SC2181
             if [ $? -eq 0 ]; then
                 echo "[WARNING] $NOMBRE is updated. Please, rerun this tool!"
-                cp "$0" "$OLDVERSION" && mv "$0".bak "$0" && chmod +x "$0"
-                [ "$GEP_NOGUI" != "Y" ] && zenity --title="$NOMBRE - ver.$VERSION" --info --text "$NOMBRE is updated. Please, rerun this tool!" --width=300 --height=80
+                cp "$0" "$OLDVERSION" && mv "$0__bakfile" "$0" && chmod +x "$0"
+                [ "$GEP_NOGUI" != "Y" ] && zenity --title="$NOMBRE - ver.$VERSION" --info --text "$NOMBRE is updated. Please, rerun this tool!" --width=300 --height=80 2>/dev/null
                 [ -n "$DEBUG" ] && to_debug_file "[INFO] UPDATER: $NOMBRE updated to $VERSION_UPDATE Exiting"
                 post_launch
                 exit 8
@@ -189,11 +203,11 @@ gui_gep(){
     [ -n "$GEP_NOGUI" ] && return 0
 
     [ -n "$DEBUG" ] && to_debug_file "[INFO] GUI: Launching on gui mode."
-    
+
     local __title="$NOMBRE - ver.$VERSION"
     local __lTEXTBIENVENIDA="Welcome to $NOMBRE.\nVersion: $VERSION.\n\nLicense: GNU General Public License v3.0\n\nby FranjeGueje\tfjgj1_hotmail.com"
-    zenity --timeout 3 --title="$__title" --info --text "$__lTEXTBIENVENIDA" --width=300 --height=80
- 
+    zenity --timeout 3 --title="$__title" --info --text "$__lTEXTBIENVENIDA" --width=300 --height=80 2>/dev/null
+
     if [ -d "$INSTALLFOLDER" ];then
         local __version_installed= ; local __file_version=
         __file_version=$(basename "$(find /home/deck/.local/share/Steam/compatibilitytools.d/GE-Proton/ -type f -name "version-*")")
@@ -211,14 +225,13 @@ After restarting Steam, the compatility tool will appear as \"GE-Proton\".\n$__v
 Would you like to check if you can install or upgrade to the latest version of GE-Proton?\nYou can also choose from the following options:" \
         --column="" --column="ID" --column="Options" \
         FALSE "force" "Forcing the (re)installation of last version of GE-Proton from Internet" \
-        FALSE "no-backup" "NOT back up the actual GE-Proton in case of upgrading current version" \
-        FALSE "debug" "Collecting logs of all operations in debug.log file" \
+        FALSE "debug" "Collecting logs of all operations in a log file in .../Steam/compatibilitytools.d folder" \
         --separator="|" \
         --width=300 \
         --height=350 \
         --hide-column=2 \
         --extra-button="$__buttonInstall" \
-        --extra-button="$__buttonRemove" )
+        --extra-button="$__buttonRemove" 2>/dev/null)
 
     local __response=$?
     [ -n "$DEBUG" ] && to_debug_file "[INFO] GUI: The values of options are: $__checkboxes"
@@ -228,15 +241,15 @@ Would you like to check if you can install or upgrade to the latest version of G
         do_install
         zenity --title="$__title" --info \
         --text "Installed the autoupdate file for $NOMBRE.\n$NOMBRE will now attempt to update automatically and silently every time the Desktop is started." \
-        --width=300 --height=80
+        --width=300 --height=80 2>/dev/null
         [ -n "$DEBUG" ] && to_debug_file "[INFO] GUI: Installed in $HOME/.config/autostart/ge-proton-rr.desktop"
     elif [ "$__checkboxes" == "$__buttonRemove" ];then
         [ -n "$DEBUG" ] && to_debug_file "[INFO] GUI: Removing the autostart desktop."
         do_uninstall
-        zenity --title="$__title" --info --text "Removed the autoupdate from the file $HOME/.config/autostart/ge-proton-rr.desktop" --width=300 --height=80
+        zenity --title="$__title" --info --text "Removed the autoupdate from the file $HOME/.config/autostart/ge-proton-rr.desktop" --width=300 --height=80 2>/dev/null
     elif [ $__response -eq 0 ]; then
         local __parameters=("--no-gui")
-        if [ -z "$__checkboxes" ]; then
+        if [ -z "${__checkboxes:-}" ]; then
             [ -n "$DEBUG" ] && to_debug_file "[INFO] GUI: No option has been selected."
         else
             IFS='|' read -r -a selected_options <<< "$__checkboxes"
@@ -247,7 +260,7 @@ Would you like to check if you can install or upgrade to the latest version of G
         [ -n "$DEBUG" ] && to_debug_file "[INFO] GUI: Running..."
         if curl -s https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases/latest | grep browser_download_url >/dev/null 2>&1; then
             [ -f "$INSTALLFOLDER"version ] && PRE_version=$(cat "$INSTALLFOLDER"version)
-            "$0" "${__parameters[@]}" &
+            "$0" -N "${__parameters[@]}" &
             PID=$!
             (
             i=0
@@ -257,30 +270,31 @@ Would you like to check if you can install or upgrade to the latest version of G
                 ((i++))
                 [ $i -eq 99 ] && i=0
             done
-            ) | zenity --progress --title="$__title" --text="Please wait until $NOMBRE has finished ..." --percentage=0 --auto-close --no-cancel
+            ) | zenity --progress --title="$__title" --text="Please wait until $NOMBRE has finished ..." --percentage=0 --auto-close --no-cancel 2>/dev/null
             wait $PID
             EXIT_CODE=$?
             if [ "$EXIT_CODE" = 88 ]; then
                 echo -e "[INFO] It seems that there is no need to install a new version."
-                zenity --title="$__title" --info --text "It seems that there is no need to install a new version" --width=300 --height=80 --no-wrap
+                zenity --title="$__title" --info --text "It seems that there is no need to install a new version" --width=300 --height=80 --no-wrap 2>/dev/null
                 post_launch
                 exit 88
             fi
             [ -f "$INSTALLFOLDER"version ] && POST_version=$(cat "$INSTALLFOLDER"version)
             if [ "$PRE_version" != "$POST_version" ]; then
-                if zenity --timeout 8 --question --title="$__title" --text="Remember to restart Steam so that it recognizes this compatility tool.\nDo you want to do it now?" --width=300 --height=80 ; then
+                if zenity --timeout 8 --question --title="$__title" --text="Remember to restart Steam so that it recognizes this compatility tool.\nDo you want to do it now?" \
+                        --width=300 --height=80  2>/dev/null; then
                     # Yes
                     pkill steam
                 fi
             fi
         else
-            zenity --title="$__title" --error --text "You don't seem to have internet" --width=300 --height=80
+            zenity --title="$__title" --error --text "You don't seem to have internet" --width=300 --height=80 2>/dev/null
         fi
     else
         [ -n "$DEBUG" ] && to_debug_file "[INFO] GUI: Canceling...Exiting from gui mode."
     fi
-    
-    zenity --timeout 2 --title="$__title" --info --text "Finish. Thank you!\n\nMade with love." --width=300 --height=80
+
+    zenity --timeout 2 --title="$__title" --info --text "Finish. Thank you!\n\nMade with love." --width=300 --height=80 2>/dev/null
     exit 0
 }
 
@@ -326,7 +340,7 @@ download_lastest_GE-Proton(){
     fi
 
     [ -n "$DEBUG" ] && to_debug_file "[INFO] DOWNLOADER: There is a new url to download a new version or it need install a new version."
-    
+
     [ -f "$DOWNLOADEDFILE" ] && rm "$DOWNLOADEDFILE" && [ -n "$DEBUG" ] && to_debug_file "[WARNING] DOWNLOADER: Removing the file $DOWNLOADEDFILE before download the new file."
 
     [ -n "$DEBUG" ] && to_debug_file "[INFO] DOWNLOADER: Starting to download the file"
@@ -375,7 +389,7 @@ extract_gep(){
 #
 should_be_installed(){
     [ -n "$GEP_INSTALLING" ] && return 0 # Check it should be installed if "force mode" is not present.
-    
+
     [ -n "$DEBUG" ] && to_debug_file "[INFO] CHK_INSTALL: Checking if it must be installed."
 
     if [ ! -f "$INSTALLFOLDER"version ];then
@@ -399,19 +413,11 @@ should_be_installed(){
 # Install the lastest GE-Proton to INSTALLFOLDER
 #
 install_gep(){
-    [ -z "$GEP_INSTALLING" ] && return 0
+    [ -z "${GEP_INSTALLING:-}" ] && return 0
 
     if [ -d "$INSTALLFOLDER" ];then
-        [ -n "$DEBUG" ] && to_debug_file "[WARNING] INSTALLER: found other installation."
-        if [ -z "$GEP_NOBACKUP" ];then
-            [ -n "$DEBUG" ] && to_debug_file "[INFO] BACKUP: Creating a backup on $BACKUPFOLDER."
-            [ -d "$BACKUPFOLDER" ] && rm -Rf "$BACKUPFOLDER"
-            mkdir -p "$BACKUPFOLDER"
-            mv "$INSTALLFOLDER" "$BACKUPFOLDER".
-        else
-            [ -n "$DEBUG" ] && to_debug_file "[INFO] BACKUP: NOT Create a backup."
-            rm -Rf "$INSTALLFOLDER"
-        fi
+        [ -n "$DEBUG" ] && to_debug_file "[WARNING] INSTALLER: found other installation. It will be deleted."
+        rm -Rf "$INSTALLFOLDER"
     fi
     [ -n "$DEBUG" ] && to_debug_file "[INFO] INSTALLER: Creating and preparing the directory $INSTALLFOLDER."
     mkdir -p "$INSTALLFOLDER"
@@ -470,9 +476,9 @@ while [ $# -ne 0 ]; do
         [ -n "$DEBUG" ] && to_debug_file "[INFO] PARAM: Silent and quiet mode. Automatically."
         GEP_NOGUI=Y
         ;;
-    --no-backup)
-        [ -n "$DEBUG" ] && to_debug_file "[INFO] PARAM: no backup of actual GE-Proton compatibility tool."
-        GEP_NOBACKUP=Y
+    -N | --no-update-app)
+        [ -n "$DEBUG" ] && to_debug_file "[INFO] PARAM: no check and upgrade this app $NOMBRE."
+        GEP_NOUPGRADE=Y
         ;;
     -i | --install)
         [ -n "$DEBUG" ] && to_debug_file "[INFO] PARAM: Install mode. Installing $NOMBRE in desktop's autostart."
